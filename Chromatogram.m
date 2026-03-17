@@ -1,3 +1,18 @@
+clc;
+clear;
+
+numSequences = input('Enter the number of DNA sequences and calculate their GC-content:')
+
+sequences = cell(1, numSequences);
+
+for i = 1:numSequences
+    sequences{i} = input('Enter a DNA sequence: ', 's');
+end
+
+for i = 1:numSequences
+    fprintf('\nAnalyzing Sequence %d: %s\n', i, sequences{i});
+
+[sampleStruct, probStruct, Comments] = scfread('sample.scf');
 [sampleStruct, probStruct, Comments] = scfread('sample.scf');
 %figure
 %hold on
@@ -19,6 +34,10 @@ plot(newSampleStructG);
 plot(newSampleStructT);
 legend('A (Filtered)', 'C (Filtered)', 'G (Filtered)', 'T (Filtered)');
 
+    % Calculate GC content
+    gcPercent = calculateGCContent(sequences{i});
+    fprintf('GC Content for Sequence %d: %.2f%%\n', i, gcPercent);
+end
 
 function newSampleStruct = removeNoise(sampleData)
     startPoint = 1; %creates the start point to cut the data from
@@ -47,3 +66,22 @@ function newSampleStruct = removeNoise(sampleData)
 
     newSampleStruct(newSampleStruct < 0) = 0; %any negative values turn positive
 end
+
+function gcPercent = calculateGCContent(dnaSequence) % This function calculates the GC-content percentage in a DNA sequence. 
+%Inputs: string containing the DNA sequence 
+%Outputs: The percentage of G and C content in the DNA sequence
+
+    totalLength = length(dnaSequence); %total length of DNA sequence
+    
+dnaSequence = upper(dnaSequence); % Convert to uppercase to standardize
+
+    if totalLength == 0
+        error('DNA sequence has no valid bases.');
+    end
+    
+    % Count the occurrences of G and C bases
+    gcCount = count(dnaSequence, 'G') + count(dnaSequence,'C');
+
+    % Calculate the GC-content percentage
+    gcPercent = (gcCount / totalLength) * 100;
+end  
