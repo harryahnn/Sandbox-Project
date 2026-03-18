@@ -1,0 +1,256 @@
+clear; clc; cla;
+
+[sampleStruct, probStruct, Comments] = scfread('sample.scf');
+
+%% GETTING VALUES
+
+rawA = sampleStruct.A; %getting raw values straight from sampleStruct
+rawC = sampleStruct.C;
+rawG = sampleStruct.G;
+rawT = sampleStruct.T;
+
+filteredA = removeNoise(rawA); %using removeNoise function to get filtered values
+filteredC = removeNoise(rawC);
+filteredG = removeNoise(rawG);
+filteredT = removeNoise(rawT);
+
+[prob, chain] = calculateProb(filteredA, filteredC, filteredG, filteredT); %getting the sequence(chain) and probability table(prob)
+
+chainStr = strjoin(chain, ''); %since chain is a cell array, we join it into a single string
+
+[aaSequence, raaSequence] = DNAtoAminoAcid(chainStr);
+
+exampleStr = 'TCTACCGATTAGNTACGTAGT'; %test sequence with N (unknown base pair in this case for mutation)
+exampleAAStr = DNAtoAminoAcid(exampleStr);
+potentialMutations = findMutation(exampleAAStr);
+
+%% GUI INTERFACE
+
+guiFig = uifigure('Name', 'Chromatogram Analyzer'); %creates the uifigure which is needed because we are using uitabs
+
+tabGroup = uitabgroup(guiFig, 'Position', [0 0 900 600]); %creates the uitabgroup to hold every uitab
+
+tab1 = uitab(tabGroup, 'Title', 'Raw Chromatogram'); %creates all the uitabs
+tab2 = uitab(tabGroup, 'Title', 'Filtered Chromatogram');
+tab3 = uitab(tabGroup, 'Title', 'GC Content Curve');
+tab4 = uitab(tabGroup, 'Title', 'Base Probabilities');
+tab5 = uitab(tabGroup, 'Title', 'Amino Acid Sequence');
+
+ax1 = uiaxes(tab1, 'Position', [20 20 860 540]); %creates the axes for each tab that needs it (raw, filtered chromatogram)
+ax2 = uiaxes(tab2, 'Position', [20 20 860 540]); %GC content curve doesn't need an axes because function does it
+
+%Raw Data Tab
+hold(ax1, 'on'); %keeps all the plotted data on the graph
+plot(ax1, rawA, 'g'); %plots all the raw data for each base pair onto ax1
+plot(ax1, rawC, 'b');
+plot(ax1, rawG, 'k');
+plot(ax1, rawT, 'r');
+legend(ax1, 'A', 'C', 'G', 'T'); 
+title(ax1, 'Raw Chromatogram');
+xlabel(ax1, 'Sample index');
+ylabel(ax1, 'Signal strength');
+hold(ax1, 'off'); %"turns off" the second axis
+
+%Filtered Data Tab
+hold(ax2, 'on'); %keeps all the plotted data on the graph
+plot(ax2, filteredA, 'g'); %plots all the filtered data onto ax2
+plot(ax2, filteredC, 'b');
+plot(ax2, filteredG, 'k');
+plot(ax2, filteredT, 'r');
+legend(ax2, 'A (Filtered)', 'C (Filtered)', 'G (Filtered)', 'T (Filtered)');
+title(ax2, 'Filtered Chromatogram');
+xlabel(ax2, 'Sample index'); ylabel(ax2, 'Signal strength');
+hold(ax2, 'off'); %"turns off the second axis
+
+%GC Content Tab
+calculateGCContent(chainStr); %calls the helper function to plot the GC curve
+gcFig = gcf; %grabs the figure the function just made
+gcAx  = findobj(gcFig, 'Type', 'axes'); %grabs its axes
+copyobj(gcAx, tab3); %copies straight into the tab
+close(gcFig); %closes the extra figure tab that calling the function makes
+
+%Probabilities Tab
+columnNames = {'A', 'C', 'G', 'T'}; %labels the columns for readability
+probTable = array2table(round(prob, 4), 'VariableNames', columnNames); %turns the probability value from the function into a table
+uit = uitable(tab4, 'Data', probTable, 'Position', [20 20 860 540]); %displays that table on a uitable
+
+%Amino Acid Sequence Tab
+uilabel(tab5, 'Text', 'Full Amino Acid Sequence', 'Position', [20 525 860 20]); %creates a label and positions it
+uitext = uitextarea(tab5); %creates a text area in tab 5 for the full amino acid sequence
+uitext.Position = [20 420 860 100];
+uitext.Value = aaSequence;
+uitext.Editable = 'off';
+
+uilabel(tab5, 'Text', 'Real Amino Acid Sequence', 'Position', [20 395 860 20]); %creates a label and positions it
+uitext2 = uitextarea(tab5); %creates another text area in tab 5 for the real amino acid sequence
+uitext2.Position = [20 290 860 100];
+uitext2.Value = raaSequence;
+uitext2.Editable = 'off';
+
+%% FUNCTIONS
+
+function newSampleStruct = removeNoise(sampleData)
+    startPoint = 1; %creates the start point to cut the data from
+    trimThreshold = mean(sampleData) * 0.1; %creates a threshold for "valuable" data
+
+    for i = 1:length(sampleData) 
+        if sampleData(i) > trimThreshold %if data is above the threshold to be considered "usefUl"
+            startPoint = i; %we then update the starting point of the data
+            break; %stop iterating because we have the starting point we want
+        end
+    end
+    
+    sampleData = sampleData(startPoint:end); %cut off unnecessary data at the beginning
+
+    x = 1:length(sampleData); %creates our x values
+    x = x'; %turns it into a row array
+
+    thresholdValue = mean(sampleData) * 0.7; %creates a threshold for what values are considered "noise"
+    noiseIndices = find(sampleData < thresholdValue); %finds the indices on each sampleData to find when the value is just noise
+    noiseValues = sampleData(noiseIndices); %finds the actual value of the signal strength for that base pair
+
+    p = polyfit(noiseIndices, noiseValues, 5); %creates parameters for the noise values of the sample (excludes all useful values)
+    noiseThreshold = polyval(p, x); %creates a rough curve of what the noise is using parameters
+
+    newSampleStruct = sampleData - noiseThreshold; %subtracts the "noise" from the actual data
+
+    newSampleStruct(newSampleStruct < 0) = 0; %any negative values turn positive
+end
+
+function [baseProb, baseChain] = calculateProb(structA, structC, structG, structT) %finds probabilities(baseProb) of base pairs as well as the sequence(baseChain)
+
+    minLen = min([length(structA), length(structC), length(structG), length(structT)]); %ensures that every single data set for the signal strength of each base pair is equal length
+    structA = structA(1:minLen);
+    structC = structC(1:minLen);
+    structG = structG(1:minLen);
+    structT = structT(1:minLen);
+
+    globalMean = mean([structA; structC; structG; structT]); %finds the mean signal strength among each basepair
+    threshold = globalMean * 0.5; %creates a threshold value that filters out all peaks below a certain height
+
+    [ampA, locA] = findpeaks(structA, 'MinPeakHeight', threshold, 'MinPeakDistance', 5); %finds the amplitude and the location of every peak for each base pair
+    [ampC, locC] = findpeaks(structC, 'MinPeakHeight', threshold, 'MinPeakDistance', 5); %ensures ample distance between pairs to avoid constant repeats
+    [ampG, locG] = findpeaks(structG, 'MinPeakHeight', threshold, 'MinPeakDistance', 5); %also ensures that signals not strong enough are not counted
+    [ampT, locT] = findpeaks(structT, 'MinPeakHeight', threshold, 'MinPeakDistance', 5); %this is our countermeasure against dye bleeding between base pairs
+
+    allBases = table; %creates the table allBases with locations, amplitudes, and the sequence
+    allBases.locations  = [locA;  locC;  locG;  locT];
+    allBases.amplitudes = [ampA;  ampC;  ampG;  ampT];
+    allBases.basepairs  = [repmat('A', length(locA), 1); repmat('C', length(locC), 1); repmat('G', length(locG), 1); repmat('T', length(locT), 1)]; %will return a sequence that looks like 'A A A C C C C C C G G G G G G G T T T T T T'
+
+    allBases = sortrows(allBases, 'locations', 'ascend'); %sorts by location, so based off of where the location of each peak is, to get the proper sequence
+
+    n = height(allBases); %used for the creation of our outputs
+    baseChain = cell(1, n); %creates a cell array for the output for our sequence
+    baseProb  = zeros(n, 4); %creates an array with 4 columns for the probabilities for every base pair at every location
+
+    for i = 1:n %for every peak found
+        pos = allBases.locations(i); %we get the position of the base 
+
+        intensities = [structA(pos), structC(pos), structG(pos), structT(pos)]; %creates array of intensities using the amplitudes of the peaks at each position 
+        intensities(intensities < 0) = 0; %if the intensity value at the peak is less than zero, set it to zero (doesn't happen, but just a safety measure)
+        totalIntensity = sum(intensities); %gets the sum of the intensities at that point
+        if totalIntensity > 0
+            baseProb(i, :) = intensities / totalIntensity; %the probability for each base pair is their intensity over total intensity, and it plots this for each peak
+        end
+
+        baseChain{i} = allBases.basepairs(i); %sets the cell array baseChain to the sequence that was in allBases.
+    end
+end
+
+function gcPercent = calculateGCContent(dnaSequence) % This function calculates the GC-content percentage in a DNA sequence. 
+%Inputs: string containing the DNA sequence 
+%Outputs: The percentage of G and C content in the DNA sequence
+
+    totalLength = length(dnaSequence); %total length of DNA sequence
+    
+    dnaSequence = upper(dnaSequence); % Convert to uppercase to standardize
+
+    if totalLength == 0
+        error('DNA sequence has no valid bases.'); %safety measure if our DNA sequence is not usable
+    end
+    
+    % Count the occurrences of G and C bases
+    gcCount = count(dnaSequence, 'G') + count(dnaSequence, 'C'); %finds the total GC content value
+    gcPercent = (gcCount/totalLength) * 100; %finds the total GC content value percentage
+
+    windowSize = 50; %every window that we calculate the GC content from is 50 base pairs - less accurate, but less calculation than if we did a window size of 20
+    
+    xWindowData = []; %initialize arrays for our plotted data
+    yWindowData = [];
+
+    for i = 1:10:totalLength - windowSize %essentially, looks at a range of 50 base pairs from the length, gets the GC content, and then moves 10 base pairs forward
+        window = dnaSequence(i:i + windowSize - 1); %sets the bounds for the window
+        wgcCount = count(window, 'G') + count(window,'C'); %finds the window GC count
+        wgcPercent = (wgcCount/windowSize) * 100; %finds the window GC percent
+        xWindowData = [xWindowData, round((2 * i + windowSize)/2)]; %gets the center of every window
+        yWindowData = [yWindowData, wgcPercent]; %gets every window GC percentage
+    end
+
+    figure;
+    plot(xWindowData, yWindowData, 'b-', 'LineWidth', 1.5); hold on; %plots the actual curve for all the GC counts at every window
+    yline(gcPercent, 'r--', sprintf('Overall: %.1f%%', gcPercent), 'LineWidth', 1.2); %creates a horizontal line for the average GC percent
+    yline(50, 'k:', '50%', 'LineWidth', 1); %creates a horizontal line right at 50%
+    xlabel('Position in sequence (bp)'); 
+    ylabel('GC content (%)');
+    title('GC content Curve');
+    legend('Window GC%', 'Overall GC%', '50% Reference Line');
+    ylim([0 100]); %0-100%
+end  
+
+function [aminoAcidSequence, realAminoAcidSequence] = DNAtoAminoAcid(dnaSequence)
+    % Step 1: DNA to mRNA Conversion (T -> A, A -> U, C -> G, G -> C)
+    mRNAsequence = strrep(dnaSequence, 'T', 'P'); % Replace T with placeholder so it doesn't overwrite in the next line
+    mRNAsequence = strrep(mRNAsequence, 'A', 'U'); % Replace A with U
+    mRNAsequence = strrep(mRNAsequence, 'P', 'A'); % Replaces placeholder with A, which was originally T
+    mRNAsequence = strrep(mRNAsequence, 'C', 'P'); % Replace C with placeholder
+    mRNAsequence = strrep(mRNAsequence, 'G', 'C'); % Replace G with C
+    mRNAsequence = strrep(mRNAsequence, 'P', 'G'); % Replace placeholder with G
+
+    % Step 2: Split mRNA into codons (sets of 3 nucleotides)
+    codonChain = {};
+    for i = 1:3:length(mRNAsequence)-2
+        codonChain{end+1} = mRNAsequence(i:i+2); % Create codons
+    end
+
+    % Step 3: Translate mRNA codons to amino acids using a genetic code table
+    % Codon to Amino Acid mapping (standard genetic code)
+    codonTranslated = containers.Map(...
+        {'UUU', 'UUC', 'UUA', 'UUG', 'UCU', 'UCC', 'UCA', 'UCG', 'UAU', 'UAC', 'UAA', 'UAG', 'UGU', 'UGC', 'UGA', 'UGG', 'CUU', 'CUC', 'CUA', 'CUG', 'CCU', 'CCC', 'CCA', 'CCG', 'CAU', 'CAC', 'CAA', 'CAG', 'CGU', 'CGC', 'CGA', 'CGG', 'AUU', 'AUC', 'AUA', 'AUG', 'ACU', 'ACC', 'ACA', 'ACG', 'AAU', 'AAC', 'AAA', 'AAG', 'AGU', 'AGC', 'AGA', 'AGG', 'GUU', 'GUC', 'GUA', 'GUG', 'GCU', 'GCC', 'GCA', 'GCG', 'GAU', 'GAC', 'GAA', 'GAG', 'GGU', 'GGC', 'GGA', 'GGG'}, ...
+        {'Phe', 'Phe', 'Leu', 'Leu', 'Ser', 'Ser', 'Ser', 'Ser', 'Tyr', 'Tyr', 'Stop', 'Stop', 'Cys', 'Cys', 'Stop', 'Trp', 'Leu', 'Leu', 'Leu', 'Leu', 'Pro', 'Pro', 'Pro', 'Pro', 'His', 'His', 'Gln', 'Gln', 'Arg', 'Arg', 'Arg', 'Arg', 'Ile', 'Ile', 'Ile', 'Met', 'Thr', 'Thr', 'Thr', 'Thr', 'Asn', 'Asn', 'Lys', 'Lys', 'Ser', 'Ser', 'Arg', 'Arg', 'Val', 'Val', 'Val', 'Val', 'Ala', 'Ala', 'Ala', 'Ala', 'Asp', 'Asp', 'Glu', 'Glu', 'Gly', 'Gly', 'Gly', 'Gly'});
+
+    % Initialize the amino acid sequence
+    aminoAcidSequence = '';
+    
+    % Translate each codon into an amino acid
+    for i = 1:length(codonChain)
+        codon = codonChain{i};
+        if isKey(codonTranslated, codon)
+            if (i == length(codonChain))
+                aminoAcidSequence = [aminoAcidSequence, codonTranslated(codon)];
+            else
+                aminoAcidSequence = [aminoAcidSequence, codonTranslated(codon), '-'];
+            end
+        else
+            aminoAcidSequence = [aminoAcidSequence, 'X', '-']; % For unknown codons
+        end
+    end
+
+    truncIndex = strfind(aminoAcidSequence,"-Stop-"); %gets the index to truncate the amino acid sequence at a stop codon
+    if ~isempty(truncIndex) %if there is an actual value to stop
+        realAminoAcidSequence = aminoAcidSequence(1:truncIndex(1) - 1); %cuts off the rest of the amino acid sequence after the first stop codon
+    end
+end
+
+function potentialMutation = findMutation(sequence) 
+    updatedSequence = strsplit(sequence, '-'); %splits apart every single amino acid 
+    mutationIndices = find(strcmp(updatedSequence, 'X')); %checks how many X's there are (unknown amino acids)
+    potentialMutation = mutationIndices;
+    if ~isempty(mutationIndices)
+        disp('Potential mutations (X) found at the following amino acid positions: ');
+        disp(length(mutationIndices)); %displays the number of mutations
+    else
+        disp('No potential mutations (X) found in this amino acid sequence.');
+    end
+end
+
