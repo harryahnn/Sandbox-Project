@@ -1,37 +1,73 @@
-clear; clc; cla; clf
+clear; clc; cla;
 
 [sampleStruct, probStruct, Comments] = scfread('sample.scf');
-% figure
-% hold on
-% plot(sampleStruct.A);
-% plot(sampleStruct.C);
-% plot(sampleStruct.G);
-% plot(sampleStruct.T);
 
-% legend('A','C','G','T');
+%% GETTING VALUES
 
-%%MAIN PORTION
+rawA = sampleStruct.A; %getting raw values straight from sampleStruct
+rawC = sampleStruct.C;
+rawG = sampleStruct.G;
+rawT = sampleStruct.T;
 
-newSampleStructA = removeNoise(sampleStruct.A);
-newSampleStructC = removeNoise(sampleStruct.C);
-newSampleStructG = removeNoise(sampleStruct.G);
-newSampleStructT = removeNoise(sampleStruct.T);
-figure;
-hold on;
-plot(newSampleStructA);
-plot(newSampleStructC);
-plot(newSampleStructG);
-plot(newSampleStructT);
-legend('A (Filtered)', 'C (Filtered)', 'G (Filtered)', 'T (Filtered)');
+filteredA = removeNoise(rawA); %using removeNoise function to get filtered values
+filteredC = removeNoise(rawC);
+filteredG = removeNoise(rawG);
+filteredT = removeNoise(rawT);
 
-[prob,chain] = calculateProb(newSampleStructA, newSampleStructC, newSampleStructG, newSampleStructT);
-chainStr = strjoin(chain, '');
+[prob, chain] = calculateProb(filteredA, filteredC, filteredG, filteredT); %getting the sequence(chain) and probability table(prob)
 
-gcPercent = calculateGCContent(chainStr);
+chainStr = strjoin(chain, ''); %since chain is a cell array, we join it into a single string
+
+%% GUI INTERFACE
+
+guiFig = uifigure('Name', 'Chromatogram Analyzer'); %creates the uifigure which is needed because we are using uitabs
+
+tabGroup = uitabgroup(guiFig, 'Position', [0 0 900 600]); %creates the uitabgroup to hold every uitab
+
+tab1 = uitab(tabGroup, 'Title', 'Raw Chromatogram');
+tab2 = uitab(tabGroup, 'Title', 'Filtered Chromatogram');
+tab3 = uitab(tabGroup, 'Title', 'GC Content Curve');
+tab4 = uitab(tabGroup, 'Title', 'Base Probabilities');
+
+ax1 = uiaxes(tab1, 'Position', [20 20 860 540]); %creates the axes for each tab that needs it (raw, filtered chromatogram)
+ax2 = uiaxes(tab2, 'Position', [20 20 860 540]); %GC content curve doesn't need an axes because function does it
+
+%Raw Data Tab
+hold(ax1, 'on'); %keeps all the plotted data on the graph
+plot(ax1, rawA, 'g'); %plots all the raw data for each base pair onto ax1
+plot(ax1, rawC, 'b');
+plot(ax1, rawG, 'k');
+plot(ax1, rawT, 'r');
+legend(ax1, 'A', 'C', 'G', 'T'); 
+title(ax1, 'Raw Chromatogram');
+xlabel(ax1, 'Sample index');
+ylabel(ax1, 'Signal strength');
+hold(ax1, 'off'); %"turns off" the second axis
+
+%Filtered Data Tab
+hold(ax2, 'on'); %keeps all the plotted data on the graph
+plot(ax2, filteredA, 'g'); %plots all the filtered data onto ax2
+plot(ax2, filteredC, 'b');
+plot(ax2, filteredG, 'k');
+plot(ax2, filteredT, 'r');
+legend(ax2, 'A (Filtered)', 'C (Filtered)', 'G (Filtered)', 'T (Filtered)');
+title(ax2, 'Filtered Chromatogram');
+xlabel(ax2, 'Sample index'); ylabel(ax2, 'Signal strength');
+hold(ax2, 'off'); %"turns off the second axis
+
+%GC Content Tab
+calculateGCContent(chainStr); %calls the helper function to plot the GC curve
+gcFig = gcf; %grabs the figure the function just made
+gcAx  = findobj(gcFig, 'Type', 'axes'); %grabs its axes
+copyobj(gcAx, tab3); %copies straight into the tab
+close(gcFig); %closes the extra figure tab that calling the function makes
+
+%Probabilities Tab
+columnNames = {'A', 'C', 'G', 'T'}; %labels the columns for readability
+probTable = array2table(round(prob, 4), 'VariableNames', columnNames); %turns the probability value from the function into a table
+uit = uitable(tab4, 'Data', probTable, 'Position', [20 20 860 540]); %displays that table on a uitable
 
 %% FUNCTIONS
-
-
 
 function newSampleStruct = removeNoise(sampleData)
     startPoint = 1; %creates the start point to cut the data from
@@ -140,7 +176,6 @@ function gcPercent = calculateGCContent(dnaSequence) % This function calculates 
     title('GC content Curve');
     legend('Window GC%', 'Overall GC%', '50% Reference Line');
     ylim([0 100]); %0-100%
-
 end  
 
 function mutations = findMutations(seq1, seq2)
