@@ -18,16 +18,19 @@ filteredT = removeNoise(rawT);
 
 chainStr = strjoin(chain, ''); %since chain is a cell array, we join it into a single string
 
+aaSequence = DNAtoAminoAcid(chainStr);
+
 %% GUI INTERFACE
 
 guiFig = uifigure('Name', 'Chromatogram Analyzer'); %creates the uifigure which is needed because we are using uitabs
 
 tabGroup = uitabgroup(guiFig, 'Position', [0 0 900 600]); %creates the uitabgroup to hold every uitab
 
-tab1 = uitab(tabGroup, 'Title', 'Raw Chromatogram');
+tab1 = uitab(tabGroup, 'Title', 'Raw Chromatogram'); %creates all the uitabs
 tab2 = uitab(tabGroup, 'Title', 'Filtered Chromatogram');
 tab3 = uitab(tabGroup, 'Title', 'GC Content Curve');
 tab4 = uitab(tabGroup, 'Title', 'Base Probabilities');
+tab5 = uitab(tabGroup, 'Title', 'Amino Acid Sequence');
 
 ax1 = uiaxes(tab1, 'Position', [20 20 860 540]); %creates the axes for each tab that needs it (raw, filtered chromatogram)
 ax2 = uiaxes(tab2, 'Position', [20 20 860 540]); %GC content curve doesn't need an axes because function does it
@@ -66,6 +69,12 @@ close(gcFig); %closes the extra figure tab that calling the function makes
 columnNames = {'A', 'C', 'G', 'T'}; %labels the columns for readability
 probTable = array2table(round(prob, 4), 'VariableNames', columnNames); %turns the probability value from the function into a table
 uit = uitable(tab4, 'Data', probTable, 'Position', [20 20 860 540]); %displays that table on a uitable
+
+%Amino Acid Sequence Tab
+uitext = uitextarea(tab5); %creates a text area in tab 5
+uitext.Position = [20 20 860 540];
+uitext.Value = aaSequence;
+uitext.Editable = 'off';
 
 %% FUNCTIONS
 
@@ -177,6 +186,46 @@ function gcPercent = calculateGCContent(dnaSequence) % This function calculates 
     legend('Window GC%', 'Overall GC%', '50% Reference Line');
     ylim([0 100]); %0-100%
 end  
+
+function aminoAcidSequence = DNAtoAminoAcid(dnaSequence)
+    % Step 1: DNA to mRNA Conversion (T -> A, A -> U, C -> G, G -> C)
+    mRNAsequence = strrep(dnaSequence, 'T', 'P'); % Replace T with placeholder so it doesn't overwrite in the next line
+    mRNAsequence = strrep(mRNAsequence, 'A', 'U'); % Replace A with U
+    mRNAsequence = strrep(mRNAsequence, 'P', 'A'); % Replaces placeholder with A, which was originally T
+    mRNAsequence = strrep(mRNAsequence, 'C', 'P'); % Replace C with placeholder
+    mRNAsequence = strrep(mRNAsequence, 'G', 'C'); % Replace G with C
+    mRNAsequence = strrep(mRNAsequence, 'P', 'G'); % Replace placeholder with G
+
+    % Step 2: Split mRNA into codons (sets of 3 nucleotides)
+    codonChain = {};
+    for i = 1:3:length(mRNAsequence)-2
+        codonChain{end+1} = mRNAsequence(i:i+2); % Create codons
+    end
+
+    % Step 3: Translate mRNA codons to amino acids using a genetic code table
+    % Codon to Amino Acid mapping (standard genetic code)
+    codonTranslated = containers.Map(...
+        {'UUU', 'UUC', 'UUA', 'UUG', 'UCU', 'UCC', 'UCA', 'UCG', 'UAU', 'UAC', 'UAA', 'UAG', 'UGU', 'UGC', 'UGA', 'UGG', 'CUU', 'CUC', 'CUA', 'CUG', 'CCU', 'CCC', 'CCA', 'CCG', 'CAU', 'CAC', 'CAA', 'CAG', 'CGU', 'CGC', 'CGA', 'CGG', 'AUU', 'AUC', 'AUA', 'AUG', 'ACU', 'ACC', 'ACA', 'ACG', 'AAU', 'AAC', 'AAA', 'AAG', 'AGU', 'AGC', 'AGA', 'AGG', 'GUU', 'GUC', 'GUA', 'GUG', 'GCU', 'GCC', 'GCA', 'GCG', 'GAU', 'GAC', 'GAA', 'GAG', 'GGU', 'GGC', 'GGA', 'GGG'}, ...
+        {'Phe', 'Phe', 'Leu', 'Leu', 'Ser', 'Ser', 'Ser', 'Ser', 'Tyr', 'Tyr', 'Stop', 'Stop', 'Cys', 'Cys', 'Stop', 'Trp', 'Leu', 'Leu', 'Leu', 'Leu', 'Pro', 'Pro', 'Pro', 'Pro', 'His', 'His', 'Gln', 'Gln', 'Arg', 'Arg', 'Arg', 'Arg', 'Ile', 'Ile', 'Ile', 'Met', 'Thr', 'Thr', 'Thr', 'Thr', 'Asn', 'Asn', 'Lys', 'Lys', 'Ser', 'Ser', 'Arg', 'Arg', 'Val', 'Val', 'Val', 'Val', 'Ala', 'Ala', 'Ala', 'Ala', 'Asp', 'Asp', 'Glu', 'Glu', 'Gly', 'Gly', 'Gly', 'Gly'});
+
+    % Initialize the amino acid sequence
+    aminoAcidSequence = '';
+    
+    % Translate each codon into an amino acid
+    for i = 1:length(codonChain)
+        codon = codonChain{i};
+        if isKey(codonTranslated, codon)
+            if (i == length(codonChain))
+                aminoAcidSequence = [aminoAcidSequence, codonTranslated(codon)];
+            else
+                aminoAcidSequence = [aminoAcidSequence, codonTranslated(codon), '-'];
+            end
+        else
+            aminoAcidSequence = [aminoAcidSequence, '-', 'X']; % For unknown codons
+        end
+    end
+end
+
 
 function mutations = findMutations(seq1, seq2)
 
