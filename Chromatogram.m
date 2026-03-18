@@ -18,7 +18,7 @@ filteredT = removeNoise(rawT);
 
 chainStr = strjoin(chain, ''); %since chain is a cell array, we join it into a single string
 
-aaSequence = DNAtoAminoAcid(chainStr);
+[aaSequence, raaSequence] = DNAtoAminoAcid(chainStr);
 
 %% GUI INTERFACE
 
@@ -71,10 +71,17 @@ probTable = array2table(round(prob, 4), 'VariableNames', columnNames); %turns th
 uit = uitable(tab4, 'Data', probTable, 'Position', [20 20 860 540]); %displays that table on a uitable
 
 %Amino Acid Sequence Tab
-uitext = uitextarea(tab5); %creates a text area in tab 5
-uitext.Position = [20 20 860 540];
+uilabel(tab5, 'Text', 'Full Amino Acid Sequence', 'Position', [20 525 860 20]); %creates a label and positions it
+uitext = uitextarea(tab5); %creates a text area in tab 5 for the full amino acid sequence
+uitext.Position = [20 420 860 100];
 uitext.Value = aaSequence;
 uitext.Editable = 'off';
+
+uilabel(tab5, 'Text', 'Real Amino Acid Sequence', 'Position', [20 395 860 20]); %creates a label and positions it
+uitext2 = uitextarea(tab5); %creates another text area in tab 5 for the real amino acid sequence
+uitext2.Position = [20 290 860 100];
+uitext2.Value = raaSequence;
+uitext2.Editable = 'off';
 
 %% FUNCTIONS
 
@@ -187,7 +194,7 @@ function gcPercent = calculateGCContent(dnaSequence) % This function calculates 
     ylim([0 100]); %0-100%
 end  
 
-function aminoAcidSequence = DNAtoAminoAcid(dnaSequence)
+function [aminoAcidSequence, realAminoAcidSequence] = DNAtoAminoAcid(dnaSequence)
     % Step 1: DNA to mRNA Conversion (T -> A, A -> U, C -> G, G -> C)
     mRNAsequence = strrep(dnaSequence, 'T', 'P'); % Replace T with placeholder so it doesn't overwrite in the next line
     mRNAsequence = strrep(mRNAsequence, 'A', 'U'); % Replace A with U
@@ -223,6 +230,11 @@ function aminoAcidSequence = DNAtoAminoAcid(dnaSequence)
         else
             aminoAcidSequence = [aminoAcidSequence, '-', 'X']; % For unknown codons
         end
+    end
+
+    truncIndex = strfind(aminoAcidSequence,"-Stop-"); %gets the index to truncate the amino acid sequence at a stop codon
+    if ~isempty(truncIndex) %if there is an actual value to stop
+        realAminoAcidSequence = aminoAcidSequence(1:truncIndex(1) - 1); %cuts off the rest of the amino acid sequence after the first stop codon
     end
 end
 
