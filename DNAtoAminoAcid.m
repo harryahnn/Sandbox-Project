@@ -1,5 +1,7 @@
 
-function aminoAcidSequence = DNAtoAminoAcid(dnaSequence)
+
+
+function aminoAcidSequence = dNAtoAminoAcid(dnaSequence)
 % Step 1: DNA to mRNA Conversion (T -> A, A -> U, C -> G, G -> C)
 mRNAsequence = strrep(dnasequence, 'T', 'P'); % Replace T with placeholder so it doesn't overwrite in the next line
 mRNAsequence = strrep(mRNAsequence, 'A', 'U'); % Replace A with U
@@ -36,5 +38,16 @@ for i = 1:length(codonChain)
         aminoAcidSequence = [aminoAcidSequence, '-', 'X']; % For unknown codons
     end
 end
+end
 
-
+function potentialMutation = findMutation(sequence)
+    updatedSequence = strsplit(sequence, '-');
+    mutationIndices = find(updatedSequence == 'X');
+    potentialMutation = mutationIndices;
+    if ~isempty(mutationIndices)
+        disp('Potential mutations (X) found at the following amino acid positions: ');
+        disp(mutationIndices);
+    else
+        disp('No potential mutations (X) found in this amino acid sequence.');
+    end
+end
