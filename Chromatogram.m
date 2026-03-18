@@ -84,23 +84,21 @@ function [baseProb, baseChain] = calculateProb(structA, structC, structG, struct
 
     allBases = sortrows(allBases, 'locations', 'ascend'); %sorts by location, so based off of where the location of each peak is, to get the proper sequence
 
-    n = height(allBases); %gets a 
-    baseChain = cell(1, n);
-    baseProb  = zeros(n, 4);
+    n = height(allBases); %used for the creation of our outputs
+    baseChain = cell(1, n); %creates a cell array for the output for our sequence
+    baseProb  = zeros(n, 4); %creates an array with 4 columns for the probabilities for every base pair at every location
 
-    for i = 1:n
-        pos = allBases.locations(i);
+    for i = 1:n %for every peak found
+        pos = allBases.locations(i); %we get the position of the base 
 
-        % probability calculation — still useful as a confidence score
-        intensities = [structA(pos), structC(pos), structG(pos), structT(pos)];
-        intensities(intensities < 0) = 0;
-        totalIntensity = sum(intensities);
+        intensities = [structA(pos), structC(pos), structG(pos), structT(pos)]; %creates array of intensities using the amplitudes of the peaks at each position 
+        intensities(intensities < 0) = 0; %if the intensity value at the peak is less than zero, set it to zero (doesn't happen, but just a safety measure)
+        totalIntensity = sum(intensities); %gets the sum of the intensities at that point
         if totalIntensity > 0
-            baseProb(i, :) = intensities / totalIntensity;
+            baseProb(i, :) = intensities / totalIntensity; %the probability for each base pair is their intensity over total intensity, and it plots this for each peak
         end
 
-        % base comes from the table — not re-derived from probabilities
-        baseChain{i} = allBases.basepairs(i);
+        baseChain{i} = allBases.basepairs(i); %sets the cell array baseChain to the sequence that was in allBases.
     end
 end
 
@@ -113,37 +111,35 @@ function gcPercent = calculateGCContent(dnaSequence) % This function calculates 
     dnaSequence = upper(dnaSequence); % Convert to uppercase to standardize
 
     if totalLength == 0
-        error('DNA sequence has no valid bases.');
+        error('DNA sequence has no valid bases.'); %safety measure if our DNA sequence is not usable
     end
     
     % Count the occurrences of G and C bases
-    gcCount = count(dnaSequence, 'G') + count(dnaSequence, 'C');
-    gcPercent = (gcCount/totalLength) * 100;
+    gcCount = count(dnaSequence, 'G') + count(dnaSequence, 'C'); %finds the total GC content value
+    gcPercent = (gcCount/totalLength) * 100; %finds the total GC content value percentage
 
-    windowSize = 50; %every window that we calculate the GC content from is 50 base pairs - less accurate, but less calculation
+    windowSize = 50; %every window that we calculate the GC content from is 50 base pairs - less accurate, but less calculation than if we did a window size of 20
     
-    xWindowData = [];
+    xWindowData = []; %initialize arrays for our plotted data
     yWindowData = [];
 
-    for i = 1:10:totalLength - windowSize
-        window = dnaSequence(i:i + windowSize - 1);
-        wgcCount = count(window, 'G') + count(window,'C');
-        wgcPercent = (wgcCount/windowSize) * 100;
-        xWindowData = [xWindowData, round((2 * i + windowSize)/2)]; % center of window
-        yWindowData = [yWindowData, wgcPercent];
+    for i = 1:10:totalLength - windowSize %essentially, looks at a range of 50 base pairs from the length, gets the GC content, and then moves 10 base pairs forward
+        window = dnaSequence(i:i + windowSize - 1); %sets the bounds for the window
+        wgcCount = count(window, 'G') + count(window,'C'); %finds the window GC count
+        wgcPercent = (wgcCount/windowSize) * 100; %finds the window GC percent
+        xWindowData = [xWindowData, round((2 * i + windowSize)/2)]; %gets the center of every window
+        yWindowData = [yWindowData, wgcPercent]; %gets every window GC percentage
     end
 
     figure;
-    plot(xWindowData, yWindowData, 'b-', 'LineWidth', 1.5);
-    hold on;
-    yline(gcPercent, 'r--', sprintf('Overall: %.1f%%', gcPercent), 'LineWidth', 1.2);
-    yline(50, 'k:', '50%', 'LineWidth', 1);
-    xlabel('Position in sequence (bp)');
+    plot(xWindowData, yWindowData, 'b-', 'LineWidth', 1.5); hold on; %plots the actual curve for all the GC counts at every window
+    yline(gcPercent, 'r--', sprintf('Overall: %.1f%%', gcPercent), 'LineWidth', 1.2); %creates a horizontal line for the average GC percent
+    yline(50, 'k:', '50%', 'LineWidth', 1); %creates a horizontal line right at 50%
+    xlabel('Position in sequence (bp)'); 
     ylabel('GC content (%)');
     title('GC content Curve');
     legend('Window GC%', 'Overall GC%', '50% Reference Line');
-    ylim([0 100]);
-    hold off;
+    ylim([0 100]); %0-100%
 
 end  
 
