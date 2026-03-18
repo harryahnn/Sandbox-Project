@@ -22,8 +22,12 @@ chainStr = strjoin(chain, ''); %since chain is a cell array, we join it into a s
 [aaSequence, raaSequence] = DNAtoAminoAcid(chainStr);
 
 exampleStr = 'TCTACCGATTAGNTACGTAGT'; %test sequence with N (unknown base pair in this case for mutation)
+disp("Example Strand of Base Pairs:")
+disp(exampleStr);
 exampleAAStr = DNAtoAminoAcid(exampleStr);
-potentialMutations = findMutation(exampleAAStr);
+disp("Example Strand of Amino Acids")
+disp(exampleAAStr);
+potentialMutations = findMutation(exampleAAStr); %used as an example, but if can be used
 
 %% GUI INTERFACE
 
@@ -111,7 +115,9 @@ function newSampleStruct = removeNoise(sampleData)
     noiseValues = sampleData(noiseIndices); %finds the actual value of the signal strength for that base pair
 
     p = polyfit(noiseIndices, noiseValues, 5); %creates parameters for the noise values of the sample (excludes all useful values)
+    warning('off', 'MATLAB:polyfit:RepeatedPointsOrRescale');
     noiseThreshold = polyval(p, x); %creates a rough curve of what the noise is using parameters
+    warning('off', 'MATLAB:polyfit:RepeatedPointsOrRescale');
 
     newSampleStruct = sampleData - noiseThreshold; %subtracts the "noise" from the actual data
 
@@ -254,4 +260,3 @@ function potentialMutation = findMutation(sequence)
         disp('No potential mutations (X) found in this amino acid sequence.');
     end
 end
-
